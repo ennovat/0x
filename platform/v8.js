@@ -1,6 +1,6 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('fs-extra')
 const path = require('path')
 const { spawn } = require('child_process')
 const pump = require('pump')
@@ -9,7 +9,6 @@ const through = require('through2')
 const debug = require('debug')('0x')
 const v8LogToTicks = require('../lib/v8-log-to-ticks')
 const { promisify } = require('util')
-const rename = promisify(fs.rename)
 const sleep = promisify(setTimeout)
 
 const {
@@ -20,10 +19,12 @@ const {
 
 module.exports = v8
 
+const SOFT_EXIT_SIGNALS = ['SIGINT', 'SIGTERM']
+
 async function v8 (args) {
   const { status, outputDir, workingDir, name, onPort, pathToNodeBinary, collectDelay } = args
 
-  let proc = spawn(pathToNodeBinary, [
+  const proc = spawn(pathToNodeBinary, [
     '--prof',
     `--logfile=${workingDir ? `${args.workingDir}/` : ''}%p-v8.log`,
     '--print-opt-source',
@@ -32,7 +33,7 @@ async function v8 (args) {
     '-r', path.join(__dirname, '..', 'lib', 'preload', 'soft-exit'),
     ...(onPort ? ['-r', path.join(__dirname, '..', 'lib', 'preload', 'detect-port.js')] : [])
   ].concat(args.argv), {
-    stdio: ['ignore', 'pipe', 'inherit', 'pipe', 'ignore', 'pipe']
+    stdio: ['inherit', 'pipe', 'inherit', 'pipe', 'ignore', 'pipe']
   })
 
   // Isolate log is created before command is executed
@@ -58,17 +59,23 @@ async function v8 (args) {
     // Stop the subprocess; force stop it on the second SIGINT
     proc.stdio[5].destroy()
 
-    onsigint = forceClose
-    process.once('SIGINT', onsigint)
+    onsoftexit = forceClose
+
+    for (let i = 0; i < SOFT_EXIT_SIGNALS.length; i++) {
+      process.once(SOFT_EXIT_SIGNALS[i], onsoftexit)
+    }
   }
   const forceClose = () => {
     status('Force closing subprocess...')
     proc.kill()
   }
 
-  let onsigint = softClose
-  process.once('SIGINT', onsigint)
-  process.once('SIGTERM', forceClose)
+  let onsoftexit = softClose
+
+  for (let i = 0; i < SOFT_EXIT_SIGNALS.length; i++) {
+    process.once(SOFT_EXIT_SIGNALS[i], onsoftexit)
+  }
+
   process.on('exit', forceClose)
 
   const whenPort = onPort && spawnOnPort(onPort, await when(proc.stdio[5], 'data'))
@@ -77,7 +84,9 @@ async function v8 (args) {
   if (onPort) {
     // Graceful close once --on-port process ends
     onPortError = whenPort.then(() => {
-      process.removeListener('SIGINT', onsigint)
+      for (let i = 0; i < SOFT_EXIT_SIGNALS.length; i++) {
+        process.removeListener(SOFT_EXIT_SIGNALS[i], onsoftexit)
+      }
       softClose()
     }, (err) => {
       proc.kill()
@@ -93,8 +102,10 @@ async function v8 (args) {
   ].filter(Boolean))
 
   clearTimeout(closeTimer)
-  process.removeListener('SIGINT', onsigint)
-  process.removeListener('SIGTERM', forceClose)
+
+  for (let i = 0; i < SOFT_EXIT_SIGNALS.length; i++) {
+    process.removeListener(SOFT_EXIT_SIGNALS[i], onsoftexit)
+  }
   process.removeListener('exit', forceClose)
 
   args.onProcessExit(code)
@@ -112,7 +123,7 @@ async function v8 (args) {
   if (!isolateLog) throw Error('no isolate logfile found')
 
   const isolateLogPath = path.join(folder, isolateLog)
-  await renameSafe(path.join(args.workingDir, isolateLog), isolateLogPath)
+  await moveSafe(path.join(args.workingDir, isolateLog), isolateLogPath)
   return {
     ticks: await v8LogToTicks(isolateLogPath, { pathToNodeBinary, collectDelay }),
     inlined: inlined,
@@ -127,15 +138,15 @@ v8.getIsolateLog = function (workingDir, pid) {
   return fs.readdirSync(workingDir).find(regex.test.bind(regex))
 }
 
-async function renameSafe (from, to, tries = 0) {
+async function moveSafe (from, to, tries = 0) {
   try {
-    await rename(from, to)
+    await fs.move(from, to)
   } catch (e) {
     if (tries > 5) {
       throw e
     }
     await sleep(1000)
-    await renameSafe(from, to, tries++)
+    await moveSafe(from, to, tries + 1)
   }
 }
 
@@ -143,7 +154,7 @@ function collectInliningInfo (sp) {
   let root
   let stdoutIsPrintOptSourceOutput = false
   let lastOptimizedFrame = null
-  let inlined = {}
+  const inlined = {}
 
   // Try to parse an INLINE() item from the optimization log,
   // returning the length of the parsed code.
@@ -154,7 +165,7 @@ function collectInliningInfo (sp) {
       // Use non greedy match so that INLINE and FUNCTION SOURCE items
       // on the same line don't interfere, else the INLINE function name
       // would contain everything up to the ) in FUNCTION SOURCE ()
-      const [ match, inlinedFn ] = /INLINE \((.*?)\) id\{/.exec(s) || [ false ]
+      const [match, inlinedFn] = /INLINE \((.*?)\) id\{/.exec(s) || [false]
       // shouldn't not match though..
       if (match === false) return -1
 

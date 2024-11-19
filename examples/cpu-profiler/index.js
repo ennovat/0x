@@ -6,8 +6,8 @@ const { promisify } = require('util')
 
 const writeFile = promisify(fs.writeFile)
 
-let app = new Koa()
-let router = new Router()
+const app = new Koa()
+const router = new Router()
 
 router.get('/', (ctx, next) => {
   // ctx.router available
@@ -29,8 +29,12 @@ router.get('/stop-profiling', async (ctx, next) => {
   }
 })
 
+router.get('/stop-server', (ctx, next) => {
+  server.close()
+})
+
 app
   .use(router.routes())
   .use(router.allowedMethods())
 
-app.listen(3000)
+const server = app.listen(3000)

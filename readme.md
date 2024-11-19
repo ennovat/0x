@@ -13,20 +13,10 @@ on any platform which Node runs on (macOs, Linux, Windows, Android...).
 
 ## Support
 
-* Node v8.5.0 and above
+* Node v12.x and above
 * Default usage supports any Operating System that Node runs on!
 * Chrome
   * Other browsers may open flamegraphs in a degraded, but functional form
-
-## Legacy
-
-Older versions of Node are supported via previous 0x versions:
-
-| 0x | Node       | macOS/SmartOS | Linux | Windows |
-|----|------------|-------|-------|---------|
-| v4 | v8.5.0+    | ☑️    | ☑️     | ☑️      |
-| v3 | v6 – v8.4.0| ☑️    | ☑️     | ⤬      |
-| v2 | v4         | ☑️    | ☑️     | ⤬      |
 
 ## Demo
 
@@ -71,13 +61,19 @@ Pass custom arguments to node:
 0x -- node --zero-fill-buffers my-app.js
 ```
 
+> for pwsh users, switch to CMD at first or run with `npx` 
+> 
+```
+npx 0x -o my-app.js
+```
+
 ## Generating
 
-When ready to generate a flamegraph, send a SIGINT.
+When ready to generate a flamegraph, send a SIGINT or a SIGTERM.
 
 The simplest way to do this is pressing CTRL+C.
 
-When `0x` catches the SIGINT, it process the stacks and
+When `0x` catches the SIGINT or the SIGTERM, it process the stacks and
 generates a profile folder (`<pid>.0x`), containing `flamegraph.html`.
 
 ## The UI
@@ -197,10 +193,9 @@ Default: `{outputDir}/{name}.html`
 
 ### --kernel-tracing
 
-Use an OS kernel tracing tool (perf on Linux or
-dtrace on macOS and SmartOS). This will capture
+Use an OS kernel tracing tool (perf on Linux). This will capture
 native stack frames (C++ modules and Libuv I/O),
-but may result in missing stacks on Node 8.
+but may result in missing stacks from Node.js due to the optimizing compiler.
 
 See [docs/kernel-tracing.md](docs/kernel-tracing.md) for more information.
 
@@ -241,15 +236,15 @@ Default: undefined
 
 ### --visualize-cpu-profile
 
-Supply a path to a CPU profile. See `examples/cpu-profile` for an example.
+Supply a path to a CPU profile (`.cpuprofile`). See `examples/cpu-profile` for examples.
 
-[CPU Profile](https://developers.google.com/web/tools/chrome-devtools/rendering-tools/js-execution) output does not have as much information but it can be exported from Chrome Devtools in the browser. There's also an automated headless tool for doing so: [automated-chrome-profiling](https://github.com/paulirish/automated-chrome-profiling). For creating Node.js Cpu Profiles in Node see [v8-profiler](https://github.com/node-inspector/v8-profiler) or [v8-profiler-next](https://github.com/hyj1991/v8-profiler-next).
+[CPU Profile](https://developers.google.com/web/tools/chrome-devtools/rendering-tools/js-execution) output does not have as much information but it can be exported from Chrome Devtools in the browser. There's also an automated headless tool for doing so: [automated-chrome-profiling](https://github.com/paulirish/automated-chrome-profiling). For creating Node.js Cpu Profiles in Node see [v8-profiler](https://github.com/node-inspector/v8-profiler) or [v8-profiler-next](https://github.com/hyj1991/v8-profiler-next). They can also be generated from Node.js 12 and above using the command-line flag [`--cpu-prof`](https://github.com/nodejs/node/commit/e0e308448240260c207958dfc3dd9245d903af85).
 
 Default: undefined
 
 ### --kernel-tracing-debug
 
-Show output from DTrace or perf(1) tools.
+Show output from perf(1) tools.
 
 Default: false
 

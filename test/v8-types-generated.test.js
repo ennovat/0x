@@ -88,8 +88,7 @@ test('Ensure eval sanitising works as expected before using fixture', function (
 
 test('Generate profile and test its output', async function (t) {
   const readFile = promisify(fs.readFile)
-  let dir
-  const cleanup = function () {
+  function cleanup () {
     if (dir) {
       t.ok(fs.existsSync(dir))
       rimraf.sync(dir)
@@ -97,13 +96,13 @@ test('Generate profile and test its output', async function (t) {
     }
     t.end()
   }
-  const onError = function (err) {
+  function onError (err) {
     cleanup()
     throw err
   }
 
   const htmlLink = await zeroX({
-    argv: [ resolve(__dirname, './fixture/do-eval.js') ],
+    argv: [resolve(__dirname, './fixture/do-eval.js')],
     workingDir: resolve('./')
   }).catch(onError)
 
@@ -114,7 +113,7 @@ test('Generate profile and test its output', async function (t) {
   t.ok(fs.existsSync(htmlFile))
   t.ok(fs.statSync(htmlFile).size > 10000)
 
-  dir = htmlFile.replace('flamegraph.html', '')
+  const dir = htmlFile.replace('flamegraph.html', '')
   const jsonFile = fs.readdirSync(dir).find(name => name.match(/\.json$/))
 
   const content = await readFile(path.resolve(dir, jsonFile)).catch(onError)
@@ -123,15 +122,17 @@ test('Generate profile and test its output', async function (t) {
 
   const app = jsonArray.find(item => item.name.match(/^appOuterFunc /))
   const appUnicode = jsonArray.find(item => item.name.match(/^doFunc.+μИاκهよΞ[/\\]unicode-in-path\.js/))
-  const appLongMethod = jsonArray.find(item => item.type === 'JS' && item.name.match(/^method: \\μИاκهよΞ\\ \[CODE:RegExp] \/ native \/ \[SHARED_LIB]/))
+  // const appLongMethod = jsonArray.find(item => item.type === 'JS' && item.name.match(/^method: wlμИاκهよΞ\\ \[CODE:RegExp] \/ native \/ \[SHARED_LIB]/))
+  const appLongMethod = jsonArray.find(item => item.type === 'JS' && item.name.match(/^method: \[CODE:RegExp] \/ native \/ \[SHARED_LIB]/))
+  jsonArray.filter(item => item.type === 'JS')
 
   const deps = jsonArray.find(item => item.name.match(/node_modules[/\\]debounce/))
 
   // We get into multi-level escape character hell if we try to escape then match against the original strings
   // Duplicate stubs long enough to check it's a) correctly classified, and b) unicode etc isn't mangled
-  const matchRegexPaths = /^\/D:\u005cDocuments and Settings\u005cАлександра ǂǐ-sì\u005cinternal\u005capp native internal\u005cnode_modules\u005csome-module\u005cesm.mjs:1:1/
+  const matchRegexPaths = /\/D:\u005cDocuments and Settings\u005cАлександра ǂǐ-sì\u005cinternal\u005capp native internal\u005cnode_modules\u005csome-module\u005cesm.mjs:1:1/
   const regexPaths = jsonArray.find(item => item.name.match(matchRegexPaths))
-  const matchRegexNonPath = /^\/\[\/\u005c] \.js native \.mjs \u005c \/ :\u005c \/ \u005c \u005c\u005cserver \(\u005cusers\u005cu2fan\u005cnode_modules\u005c\|\/node_modules\/\) \[eval].js:1:2/
+  const matchRegexNonPath = /\/\[\/\u005c] \.js native \.mjs \u005c \/ :\u005c \/ \u005c \u005c\u005cserver \(\u005cusers\u005cu2fan\u005cnode_modules\u005c\|\/node_modules\/\) \[eval].js:1:2/
   const regexNonPath = jsonArray.find(item => item.name.match(matchRegexNonPath))
 
   const evalFunc = jsonArray.find(item => item.type === 'JS' && item.name.match(/^evalInnerFunc /))

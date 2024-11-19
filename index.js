@@ -1,6 +1,6 @@
 'use strict'
 
-const { sun, linux, windows, v8 } = require('./platform')
+const { linux, v8 } = require('./platform')
 const debug = require('debug')('0x')
 const { join, isAbsolute, relative, dirname } = require('path')
 const fs = require('fs')
@@ -43,7 +43,7 @@ async function zeroEks (args) {
   if (visualizeCpuProfile) return cpuProfileVisualization(args)
 
   args.title = args.title || `node ${args.argv.join(' ')}`
-  var { ticks, pid, folder, inlined } = await startProcessAndCollectTraceData(args)
+  const { ticks, pid, folder, inlined } = await startProcessAndCollectTraceData(args)
 
   if (treeDebug === true) {
     const tree = await ticksToTree(ticks, {
@@ -100,8 +100,8 @@ async function startProcessAndCollectTraceData (args) {
       throw err
     })
     case 'linux': return linux(args, await isSudo())
-    case 'win32': return windows()
-    default: return sun(args, await isSudo())
+    default:
+      throw Error(`0x: ${platform} kernel tracing is not currently supported`)
   }
 }
 
@@ -123,18 +123,18 @@ async function cpuProfileVisualization (opts) {
   return file
 }
 
-async function visualize ({ visualizeOnly, treeDebug, workingDir, title, mapFrames, open, name, pathToNodeBinary }) {
+async function visualize ({ visualizeOnly, treeDebug, workingDir, title, mapFrames, open, name, pathToNodeBinary, collectDelay }) {
   try {
     const folder = getFolder(visualizeOnly, workingDir)
     const ls = fs.readdirSync(folder)
     const traceFile = /^stacks\.(.*)\.out$/
-    const isolateLog = /^isolate-((0x)?[0-9A-Fa-f]{2,16})(?:-\d*)?-(\d*)-v8\.(log|json)$/
+    const isolateLog = /^isolate-((?:0x)?[0-9A-Fa-f]{2,16})(?:-\d*)?-(\d*)-v8\.(log|json)$/
     const stacks = ls.find((f) => isolateLog.test(f) || traceFile.test(f))
     if (!stacks) {
       throw Error('Invalid data path provided (no stacks or v8 log file found)')
     }
 
-    var meta
+    let meta
     try {
       meta = JSON.parse(fs.readFileSync(join(folder, 'meta.json')))
     } catch (e) {
@@ -151,7 +151,7 @@ async function visualize ({ visualizeOnly, treeDebug, workingDir, title, mapFram
     name = name || meta.name
 
     const ticks = (srcType === 'v8')
-      ? await v8LogToTicks(src, { pathToNodeBinary })
+      ? await v8LogToTicks(src, { pathToNodeBinary, collectDelay })
       : traceStacksToTicks(src)
 
     if (treeDebug === true) {
